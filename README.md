@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="FireCloud SE" width="180"/>
+  <img src="https://forthcoming-apricot-rrurqmtnnn.edgeone.app/FireCloud_logo-removebg-preview.png" alt="FireCloud SE" width="180"/>
 </p>
 
 <h1 align="center">🔥 FireCloud SE</h1>
