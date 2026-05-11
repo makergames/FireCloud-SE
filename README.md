@@ -7,7 +7,7 @@
 
 <p align="center">
   El primer Cloud OS visual nativo en navegador.<br/>
-  <strong>Open Source. Gratuito. Español.</strong>
+  <strong>Open Source. Gratuito</strong>
 </p>
 
 <p align="center">
