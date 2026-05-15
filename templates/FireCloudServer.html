@@ -1,0 +1,2808 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="https://forthcoming-apricot-rrurqmtnnn.edgeone.app/FireCloud_logo-removebg-preview.png" />
+<title>FireCloud SE</title>
+
+<script>
+window.__WALLPAPER_STATE__ = null;
+window.__SCREEN_SIZE__ = { w: {{ screen_w }}, h: {{ screen_h }} };
+(function () {
+    const presets = {
+        classic: "linear-gradient(135deg, #d6d6d6 0%, #ececec 100%)",
+        light: "linear-gradient(135deg, #ececec 0%, #f7f7f7 100%)",
+        gray: "linear-gradient(135deg, #bcbcbc 0%, #d8d8d8 100%)",
+        dark: "linear-gradient(135deg, #2b2b2b 0%, #4a4a4a 100%)",
+        blue: "linear-gradient(135deg, #8ba8c9 0%, #dce6f2 100%)",
+        green: "linear-gradient(135deg, #98bfa2 0%, #e7f0ea 100%)"
+    };
+    async function applyWallpaperFromServer() {
+        try {
+            const res = await fetch("/api/wallpaper-state?t=" + Date.now());
+            const s = await res.json();
+            if (!s.ok) return;
+            let bg = presets.classic;
+            if (s.mode === "image") {
+                bg = 'url("/api/wallpaper-current?t=' + Date.now() + '") center/cover fixed no-repeat';
+            } else if (s.mode === "preset") {
+                bg = presets[s.name] || presets.classic;
+            }
+            document.documentElement.style.setProperty("--desktop-bg", bg);
+            document.body.style.background = bg;
+        } catch {}
+    }
+    window.addEventListener("DOMContentLoaded", applyWallpaperFromServer);
+})();
+</script>
+
+<style>
+:root {
+    --toolbar-h: 24px;
+    --toolbar-bg: #e8e8e8;
+    --desktop-bg: linear-gradient(135deg, #d6d6d6 0%, #ececec 100%);
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    background: var(--desktop-bg);
+    color: #222;
+    overflow: hidden;
+}
+body.busy, body.busy * { cursor: wait !important; }
+#app { width: 100vw; height: 100vh; display: flex; flex-direction: column; background: transparent; }
+#toolbar {
+    height: var(--toolbar-h);
+    background: var(--toolbar-bg);
+    border-bottom: 1px solid #b0b0b0;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font-size: 12px;
+    color: #222;
+    user-select: none;
+    flex-shrink: 0;
+}
+.toolbar-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+#brandLogo { width: 18px; height: 18px; object-fit: contain; margin-right: 4px; }
+.toolbar-right { display: flex; align-items: center; gap: 12px; font-size: 11px; color: #444; margin-left: auto; }
+.tb-btn {
+    background: none;
+    border: none;
+    color: inherit;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    line-height: 18px;
+}
+.tb-btn:hover { background: rgba(0,0,0,0.08); }
+.tb-sep { width: 1px; height: 14px; background: #b0b0b0; }
+#taskbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 52vw;
+    white-space: nowrap;
+    scrollbar-width: thin;
+}
+#taskbar::-webkit-scrollbar { height: 8px; }
+#taskbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.22); border-radius: 999px; }
+.task-item {
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 3px;
+    background: #fff;
+    border: 1px solid #c0c0c0;
+    cursor: pointer;
+    font-size: 11px;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 240px;
+}
+.task-item:hover { background: #f0f0f0; }
+.task-item.minimized { opacity: 0.55; font-style: italic; }
+.task-icon, .app-icon, .file-icon { width: 16px; height: 16px; flex: 0 0 16px; object-fit: contain; }
+.task-title, .app-name, .app-exec { overflow: hidden; text-overflow: ellipsis; }
+.task-close-btn, .task-max-btn {
+    font-size: 12px;
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 0 2px;
+    line-height: 1;
+}
+.task-close-btn:hover { color: #d00; }
+.task-max-btn:hover { color: #000; }
+#clock { font-weight: 600; font-size: 12px; }
+#status { font-size: 11px; }
+#desktop { position: relative; flex: 1; overflow: hidden; background: transparent; }
+#wallpaperOverlay {
+    position: absolute;
+    inset: 0;
+    background: var(--desktop-bg);
+    background-size: cover;
+    background-position: center;
+    opacity: 1;
+    z-index: 0;
+    pointer-events: none;
+}
+#screen {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: transparent;
+    z-index: 1;
+    user-select: none;
+    -webkit-user-drag: none;
+    outline: none;
+    cursor: default;
+}
+#keyboard-capture {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: -1;
+}
+.panel {
+    position: absolute;
+    min-width: 340px;
+    min-height: 240px;
+    background: #efefef;
+    border: 1px solid #8b8b8b;
+    box-shadow: 1px 1px 0 rgba(255,255,255,0.75) inset, 2px 2px 0 rgba(0,0,0,0.12);
+    display: none;
+    z-index: 20;
+    resize: both;
+    overflow: hidden;
+    border-radius: 2px;
+}
+.panel.show { display: block; }
+.panel-head {
+    height: 24px;
+    background: linear-gradient(#f7f7f7, #cfcfcf);
+    border-bottom: 1px solid #a9a9a9;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 6px;
+    cursor: move;
+    user-select: none;
+    font-size: 12px;
+}
+.panel-head:active { cursor: grabbing; }
+.panel, .panel-head { touch-action: none; }
+.panel-title { font-weight: 600; }
+.panel-close {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #8a8a8a;
+    background: #e8e8e8;
+    cursor: pointer;
+}
+.panel-body {
+    height: calc(100% - 24px);
+    overflow: auto;
+    background: #efefef;
+    padding: 8px;
+}
+#appsPanel { left: 10px; top: 44px; width: 420px; height: 560px; }
+#settingsPanel { left: 440px; top: 44px; width: 400px; height: 560px; }
+    #appsPanel.apps-window {
+        left: 50%;
+        top: 50%;
+        width: min(82vw, 940px);
+        height: min(74vh, 590px);
+        transform: translate(-50%, -50%);
+        background: rgba(235, 235, 235, 0.24);
+        border: 1px solid rgba(255,255,255,0.40);
+        box-shadow: 0 16px 50px rgba(0,0,0,0.22), 0 1px 0 rgba(255,255,255,0.45) inset;
+        backdrop-filter: blur(22px) saturate(150%);
+        -webkit-backdrop-filter: blur(22px) saturate(150%);
+        resize: none;
+        overflow: hidden;
+        border-radius: 16px;
+        display: none;
+    }
+    #appsPanel.apps-window.show { display: block; }
+    .apps-window .panel-head {
+        cursor: default;
+        height: 34px;
+        padding: 0 8px 0 12px;
+        background: rgba(250,250,250,0.22);
+        backdrop-filter: blur(14px) saturate(170%);
+        -webkit-backdrop-filter: blur(14px) saturate(170%);
+        border-bottom: 1px solid rgba(255,255,255,0.36);
+    }
+    .apps-window .panel-body {
+        background: transparent;
+        padding: 12px;
+        height: calc(100% - 34px);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        overflow: hidden;
+    }
+    .apps-topbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 8px;
+        border-radius: 16px;
+        background: rgba(255,255,255,0.14);
+        border: 1px solid rgba(255,255,255,0.28);
+        backdrop-filter: blur(14px) saturate(160%);
+        -webkit-backdrop-filter: blur(14px) saturate(160%);
+    }
+    #appsCount {
+        margin-left: auto;
+        opacity: .8;
+        font-size: 11px;
+    }
+    #appsPanel.apps-window .input {
+        flex: 1 1 240px;
+        min-width: 180px;
+        padding: 11px 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,0.34);
+        background: rgba(255,255,255,0.20);
+        color: #1e1e1e;
+        backdrop-filter: blur(12px) saturate(155%);
+        -webkit-backdrop-filter: blur(12px) saturate(155%);
+        box-shadow: 0 1px 0 rgba(255,255,255,0.35) inset;
+        outline: none;
+    }
+    #appsPanel.apps-window .input::placeholder { color: rgba(40,40,40,0.62); }
+    #appsPanel.apps-window .mini,
+    #appsPanel.apps-window .panel-close {
+        border: 1px solid rgba(255,255,255,0.35);
+        background: rgba(255,255,255,0.18);
+        color: #1d1d1d;
+        backdrop-filter: blur(12px) saturate(155%);
+        -webkit-backdrop-filter: blur(12px) saturate(155%);
+        box-shadow: 0 1px 0 rgba(255,255,255,0.45) inset, 0 6px 14px rgba(0,0,0,0.08);
+    }
+    #appsPanel.apps-window .mini:hover,
+    #appsPanel.apps-window .panel-close:hover {
+        background: rgba(255,255,255,0.30);
+    }
+    #appsPanel.apps-window .panel-close {
+        width: 26px;
+        height: 26px;
+        border-radius: 999px;
+        font-size: 16px;
+        line-height: 1;
+    }
+    #appsList.apps-grid {
+        flex: 1;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+        grid-auto-rows: 140px;
+        gap: 12px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        align-content: start;
+        padding: 4px 2px 10px 2px;
+    }
+    .app-card {
+        background: rgba(255,255,255,0.24);
+        border: 1px solid rgba(255,255,255,0.34);
+        box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+        border-radius: 18px;
+        padding: 12px 10px;
+        min-height: 132px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        text-align: center;
+        user-select: none;
+        -webkit-user-drag: none;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+    }
+    .app-card:hover { background: rgba(255,255,255,0.36); transform: translateY(-1px); }
+    .app-card.dragging { opacity: 0.70; transform: scale(0.98); }
+    .app-card.drop-target { outline: 2px dashed rgba(0,0,0,0.30); outline-offset: 3px; }
+    .app-card .app-icon {
+        width: 46px;
+        height: 46px;
+        object-fit: contain;
+        filter: drop-shadow(0 2px 2px rgba(0,0,0,0.18));
+        pointer-events: none;
+    }
+    .app-card-title {
+        font-size: 12px;
+        font-weight: 600;
+        line-height: 1.15;
+        color: #222;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .app-card-sub {
+        font-size: 10px;
+        color: #555;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .app-context-menu {
+        position: absolute;
+        z-index: 1200;
+        min-width: 220px;
+        background: rgba(246,246,246,0.98);
+        border: 1px solid #b8b8b8;
+        border-radius: 12px;
+        box-shadow: 0 14px 34px rgba(0,0,0,0.22);
+        padding: 6px;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+    }
+    .app-context-menu.hidden { display: none; }
+    .app-context-menu button {
+        width: 100%;
+        border: none;
+        background: transparent;
+        text-align: left;
+        padding: 9px 10px;
+        border-radius: 8px;
+        font: inherit;
+        cursor: pointer;
+    }
+    .app-context-menu button:hover { background: rgba(0,0,0,0.08); }
+    .app-context-menu button.disabled { opacity: 0.35; pointer-events: none; }
+    .file-preview {
+        width: 24px;
+        height: 18px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: rgba(0,0,0,0.06);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .file-preview img, .file-preview video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+    .file-row .name-wrap { min-width: 0; display: flex; flex-direction: column; }
+    .file-row .mini.disabled { opacity: 0.35; pointer-events: none; }
+    .editor-preview {
+        width: 100%;
+        height: calc(100% - 74px);
+        margin-bottom: 8px;
+        border: 1px solid rgba(0,0,0,0.16);
+        border-radius: 12px;
+        background: rgba(255,255,255,0.65);
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .editor-preview.hidden { display: none; }
+    .editor-preview img,
+    .editor-preview video {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        display: block;
+        background: #fff;
+    }
+    .editor-preview .placeholder {
+        padding: 14px;
+        text-align: center;
+        color: #444;
+        font-size: 12px;
+        line-height: 1.3;
+    }
+    .file-preview.media-thumb {
+        width: 34px;
+        height: 24px;
+        border-radius: 8px;
+        overflow: hidden;
+        background: rgba(255,255,255,0.72);
+        border: 1px solid rgba(0,0,0,0.10);
+    }
+    .file-preview.media-thumb img,
+    .file-preview.media-thumb video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+    #editorText.hidden {
+        display: none;
+    }
+
+    .file-row .name-main { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-row .open-btn, .file-row .delete-btn { align-self: center; }
+    .file-row .name-sub { color: #777; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .media-thumb img, .media-thumb video { object-fit: cover; }
+    .file-preview.media-thumb { background: rgba(0,0,0,0.05); }
+    .app-info-grid {
+        display: grid;
+        grid-template-columns: 128px 1fr;
+        gap: 8px 10px;
+        width: 100%;
+        align-items: start;
+        font-size: 12px;
+    }
+    .app-info-icon {
+        width: 64px;
+        height: 64px;
+        object-fit: contain;
+        margin: 2px 0 6px 0;
+    }
+    #appInfoBody { align-items: flex-start; }
+    #appInfoModal .sysmsg-box, #appConfirmModal .sysmsg-box { width: min(560px, calc(100vw - 24px)); }
+    .sysmsg-actions .mini { min-width: 100px; }
+    #appsPanel.apps-window .apps-topbar .mini,
+    #appsPanel.apps-window .apps-topbar .input,
+    #notificationsPanel .mini,
+    #notificationsPanel .panel-close {
+        border: 1px solid rgba(255,255,255,0.35);
+        background: rgba(255,255,255,0.18);
+        color: #1d1d1d;
+        backdrop-filter: blur(12px) saturate(155%);
+        -webkit-backdrop-filter: blur(12px) saturate(155%);
+        box-shadow: 0 1px 0 rgba(255,255,255,0.45) inset, 0 6px 14px rgba(0,0,0,0.08);
+        border-radius: 14px;
+    }
+    #appsPanel.apps-window .apps-topbar .mini:hover,
+    #notificationsPanel .mini:hover,
+    #notificationsPanel .panel-close:hover {
+        background: rgba(255,255,255,0.30);
+    }
+    #appsPanel.apps-window .panel-head .panel-close {
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        font-size: 16px;
+        line-height: 1;
+    }
+    .apps-topbar .apps-sort {
+        font-size: 11px;
+        opacity: .9;
+    }
+    #appsPanel.apps-window .apps-topbar {
+        align-items: center;
+    }
+    #appsPanel.apps-window .small {
+        white-space: nowrap;
+    }
+    #appsList.apps-grid {
+        grid-template-columns: repeat(auto-fill, minmax(138px, 1fr));
+        grid-auto-rows: 146px;
+        padding-top: 6px;
+    }
+    .app-card {
+        touch-action: none;
+    }
+    .app-card .app-icon {
+        width: 48px;
+        height: 48px;
+    }
+    .app-context-menu button.disabled {
+        opacity: 0.28;
+        color: #999;
+        text-decoration: line-through;
+    }
+    .notifications-panel {
+        left: 50%;
+        top: 54px;
+        transform: translateX(-50%);
+        width: min(700px, calc(100vw - 24px));
+        height: min(560px, calc(100vh - 120px));
+        background: rgba(236,236,236,0.24);
+        border: 1px solid rgba(255,255,255,0.38);
+        box-shadow: 0 16px 50px rgba(0,0,0,0.22), 0 1px 0 rgba(255,255,255,0.45) inset;
+        backdrop-filter: blur(22px) saturate(150%);
+        -webkit-backdrop-filter: blur(22px) saturate(150%);
+        resize: none;
+        overflow: hidden;
+        border-radius: 16px;
+    }
+    .notifications-panel .panel-head {
+        cursor: default;
+        height: 34px;
+        padding: 0 8px 0 12px;
+        background: rgba(250,250,250,0.24);
+        backdrop-filter: blur(12px) saturate(160%);
+        -webkit-backdrop-filter: blur(12px) saturate(160%);
+        border-bottom: 1px solid rgba(255,255,255,0.36);
+    }
+    .notifications-panel .panel-body {
+        background: transparent;
+        padding: 12px;
+        height: calc(100% - 34px);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow: hidden;
+    }
+    .notifications-list {
+        flex: 1;
+        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding-right: 2px;
+    }
+    .notification-item {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        align-items: start;
+        padding: 10px 12px;
+        border-radius: 14px;
+        background: rgba(255,255,255,0.22);
+        border: 1px solid rgba(255,255,255,0.28);
+        box-shadow: 0 5px 16px rgba(0,0,0,0.06);
+    }
+    .notification-item .title {
+        font-weight: 700;
+        font-size: 13px;
+        margin-bottom: 2px;
+    }
+    .notification-item .msg {
+        font-size: 12px;
+        color: #333;
+        line-height: 1.25;
+        word-break: break-word;
+    }
+    .notification-item .time {
+        font-size: 10px;
+        color: #666;
+        margin-top: 4px;
+    }
+    .notification-empty {
+        padding: 18px 12px;
+        text-align: center;
+        color: #555;
+    }
+    .notification-bell {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 30px;
+        height: 24px;
+        border-radius: 999px;
+        padding: 0 7px;
+    }
+    .notification-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        min-width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        background: #cc2c2c;
+        color: #fff;
+        font-size: 10px;
+        line-height: 16px;
+        text-align: center;
+        padding: 0 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+    }
+
+
+.input { width: 100%; padding: 6px; border: 1px solid #9d9d9d; font: inherit; }
+    height: calc(100% - 44px);
+    overflow-y: auto;
+    border: 1px solid #b8b8b8;
+    background: #fff;
+}
+.app-item {
+    padding: 8px 10px;
+    border-bottom: 1px solid #ebebeb;
+    cursor: pointer;
+    font-size: 12px;
+    background: #fff;
+    display: grid;
+    grid-template-columns: 20px 1fr auto;
+    gap: 8px;
+    align-items: center;
+}
+.app-item:hover { background: #f3f3f3; }
+.app-name { font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.app-exec { color: #7a7a7a; font-size: 11px; }
+.badge {
+    display: inline-block;
+    margin-left: 6px;
+    font-size: 10px;
+    padding: 1px 4px;
+    border: 1px solid #8d8d8d;
+    background: #f0f0f0;
+    color: #444;
+}
+.section { border: 1px solid #b6b6b6; background: #fafafa; padding: 8px; margin-bottom: 10px; }
+.section-title { font-weight: 600; font-size: 12px; margin-bottom: 6px; }
+.metric { display: grid; grid-template-columns: 70px 1fr; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 12px; }
+.bar { height: 10px; border: 1px solid #9a9a9a; background: #fff; overflow: hidden; }
+.bar > div { height: 100%; width: 0%; background: linear-gradient(90deg, #8a8a8a, #b8b8b8); }
+.preset-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.preset {
+    padding: 6px 4px;
+    border: 1px solid #9a9a9a;
+    background: linear-gradient(#f8f8f8, #dfdfdf);
+    cursor: pointer;
+    text-align: center;
+    font-size: 11px;
+}
+.preset:hover { background: linear-gradient(#ffffff, #e5e5e5); }
+.action-row { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.mini {
+    padding: 5px 8px;
+    border: 1px solid #9a9a9a;
+    background: linear-gradient(#f8f8f8, #dfdfdf);
+    cursor: pointer;
+    font-size: 11px;
+}
+.mini:hover { background: linear-gradient(#ffffff, #e5e5e5); }
+.small { font-size: 11px; color: #555; }
+#screenHint {
+    position: absolute;
+    right: 10px;
+    bottom: 8px;
+    z-index: 2;
+    font-size: 11px;
+    color: #666;
+    background: rgba(255,255,255,0.45);
+    border: 1px solid rgba(0,0,0,0.1);
+    padding: 3px 6px;
+}
+input[type="file"] { display: none; }
+.note-panel {
+    left: 840px;
+    top: 44px;
+    width: 360px;
+    height: 410px;
+    background: #fff3a1;
+}
+.note-panel .panel-head { background: linear-gradient(#fff2b6, #e7d45f); }
+.note-body { background: #fff3a1; height: calc(100% - 24px); padding: 8px; }
+#noteText, #editorText {
+    width: 100%;
+    height: calc(100% - 40px);
+    border: 1px solid #cdbb58;
+    background: rgba(255,255,255,0.6);
+    padding: 8px;
+    resize: none;
+    outline: none;
+    font-family: inherit;
+    font-size: 13px;
+}
+.files-panel {
+    left: 840px;
+    top: 470px;
+    width: 440px;
+    height: 390px;
+    background: #efefef;
+}
+#filesList {
+    border: 1px solid #b8b8b8;
+    background: #fff;
+    height: calc(100% - 100px);
+    overflow: auto;
+}
+.file-row {
+    padding: 7px 8px;
+    border-bottom: 1px solid #efefef;
+    cursor: pointer;
+    font-size: 12px;
+    display: grid;
+    grid-template-columns: 18px 1fr auto auto;
+    gap: 8px;
+    align-items: center;
+}
+.file-row:hover { background: #f4f4f4; }
+.file-row.dir { font-weight: 600; }
+.file-meta { color: #777; font-size: 11px; white-space: nowrap; }
+.editor-panel {
+    left: 480px;
+    top: 100px;
+    width: 600px;
+    height: 460px;
+    background: #efefef;
+}
+.props-panel {
+    left: 880px;
+    top: 80px;
+    width: 480px;
+    height: 480px;
+    background: #eef3ff;
+}
+.props-panel .panel-head { background: linear-gradient(#f6f8ff, #d8e3ff); }
+.substitution-panel {
+    left: 880px;
+    top: 80px;
+    width: 480px;
+    height: 560px;
+    background: #f3f3f3;
+}
+.substitution-panel .panel-head { background: linear-gradient(#f8f8f8, #d9d9d9); }
+.exec-panel {
+    left: 880px;
+    top: 80px;
+    width: 480px;
+    height: 560px;
+    background: #f7f7f7;
+}
+.exec-panel .panel-head { background: linear-gradient(#f8f8f8, #d9d9d9); }
+    border: 1px solid #b8b8b8;
+    background: #fff;
+    height: calc(100% - 170px);
+    overflow: auto;
+}
+.exec-row {
+    padding: 8px 10px;
+    border-bottom: 1px solid #efefef;
+    cursor: pointer;
+    font-size: 12px;
+    display: grid;
+    grid-template-columns: 20px 1fr auto;
+    gap: 8px;
+    align-items: center;
+}
+.exec-row:hover { background: #f4f4f4; }
+.info-grid {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px 10px;
+    font-size: 12px;
+}
+.info-key { color: #666; }
+.info-value { word-break: break-word; }
+#editorPath {
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 6px;
+    word-break: break-all;
+}
+.panel button, .panel input, .panel textarea { font: inherit; }
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.30);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+.modal-backdrop.show { display: flex; }
+.sysmsg-box {
+    width: 520px;
+    max-width: calc(100vw - 24px);
+    background: #efefef;
+    border: 1px solid #7f7f7f;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.24);
+    font-size: 12px;
+    border-radius: 2px;
+}
+.sysmsg-head {
+    background: linear-gradient(#f8f8f8, #cfcfcf);
+    border-bottom: 1px solid #a9a9a9;
+    padding: 8px 10px;
+    font-weight: 600;
+}
+.sysmsg-body {
+    display: flex;
+    gap: 12px;
+    padding: 16px 14px;
+    align-items: center;
+    background: #f4f4f4;
+}
+.sysmsg-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #d9534f;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex: 0 0 40px;
+}
+.sysmsg-text { line-height: 1.4; }
+.sysmsg-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 10px 14px 14px;
+    background: #f4f4f4;
+}
+.sysmsg-actions .mini {
+    min-width: 92px;
+}
+
+#toastHost {
+    position: fixed;
+    right: 12px;
+    bottom: 12px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+}
+.toast {
+    min-width: 240px;
+    max-width: 360px;
+    background: rgba(35,35,35,0.96);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.25);
+    font-size: 13px;
+    pointer-events: auto;
+    animation: popin .15s ease-out;
+}
+@keyframes popin {
+    from { transform: translateY(8px); opacity: .1; }
+    to { transform: translateY(0); opacity: 1; }
+}
+.trash-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    color: #a00;
+    padding: 0 4px;
+}
+.trash-btn:hover { color: #d00; }
+    .trash-icon { width: 14px; height: 14px; fill: currentColor; display: inline-block; vertical-align: middle; pointer-events: none; }
+.trash-btn.disabled { opacity: .25; cursor: not-allowed; }
+.dock-wrap {
+    position: absolute;
+    left: 50%;
+    bottom: 8px;
+    transform: translateX(-50%) translateY(110%);
+    z-index: 50;
+    transition: transform .18s ease, opacity .18s ease;
+    opacity: 0;
+    pointer-events: none;
+}
+.dock-wrap.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+}
+.dock {
+    display: flex;
+    gap: 8px;
+    align-items: end;
+    padding: 8px 10px;
+    border-radius: 18px;
+    background: rgba(245,245,245,0.32);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255,255,255,0.35);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.16);
+    max-width: min(760px, calc(100vw - 24px));
+    overflow: hidden;
+}
+.dock-slot {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding: 0;
+    overflow: hidden;
+    transition: transform .12s ease, background .12s ease;
+}
+.dock-slot:hover {
+    transform: translateY(-3px) scale(1.06);
+    background: rgba(255,255,255,0.42);
+}
+.dock-slot img {
+    width: 24px;
+    height: 24px;
+    object-fit: contain;
+    pointer-events: none;
+}
+.dock-slot .dock-label {
+    position: absolute;
+    bottom: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    white-space: nowrap;
+    color: #222;
+    opacity: 0;
+    pointer-events: none;
+}
+.dock-slot:hover .dock-label { opacity: 1; }
+.dock-menu {
+    position: absolute;
+    z-index: 80;
+    min-width: 170px;
+    background: rgba(248,248,248,0.96);
+    border: 1px solid #bdbdbd;
+    border-radius: 10px;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.18);
+    padding: 6px;
+    backdrop-filter: blur(12px);
+}
+.dock-menu.hidden { display: none; }
+.dock-menu button {
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: left;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font: inherit;
+    cursor: pointer;
+}
+.dock-menu button:hover { background: rgba(0,0,0,0.08); }
+button, .tb-btn, .mini, .task-item, .app-item, .file-row, .preset, .panel-close, .dock-slot, .dock-menu button { cursor: pointer; }
+input, textarea { cursor: text; }
+.panel-head { cursor: move; }
+.panel { cursor: default; }
+</style>
+</head>
+<body>
+<div id="app">
+    <div id="toolbar">
+        <div class="toolbar-left">
+            <img id="brandLogo" src="https://forthcoming-apricot-rrurqmtnnn.edgeone.app/FireCloud_logo-removebg-preview.png" alt="FireCloud" />
+            <button class="tb-btn" id="appsBtn">Apps</button>
+            <button class="tb-btn" id="settingsBtn">Ajustes</button>
+            <div class="tb-sep"></div>
+            <button class="tb-btn" id="filesBtn">Archivos</button>
+            <button class="tb-btn" id="browserBtn">Navegador</button>
+            <button class="tb-btn" id="editorBtn">Bloc</button>
+            <button class="tb-btn" id="terminalBtn">Terminal</button>
+            <button class="tb-btn" id="desktopBtn">Escritorio</button>
+            <button class="tb-btn" id="reloadBtn">Recargar</button>
+            <div class="tb-sep"></div>
+            <div id="taskbar"></div>
+        </div>
+        <div class="toolbar-right">
+            <div id="status">Cargando...</div>
+            <button class="tb-btn notification-bell" id="notificationsBtn" title="Notificaciones" aria-label="Notificaciones">
+                <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22Zm8-5.5V16l-1.7-1.7V11a6.3 6.3 0 0 0-5-6.2V4a1.3 1.3 0 1 0-2.6 0v.8A6.3 6.3 0 0 0 5.7 11v3.3L4 16v.5l-1 1V19h18v-1.5l-1-1Z"/>
+                </svg>
+                <span class="notification-badge hidden" id="notificationsBadge">0</span>
+            </button>
+            <div id="clock">--:--</div>
+        </div>
+    </div>
+
+    <div id="desktop">
+        <div id="wallpaperOverlay"></div>
+        <img id="screen" src="/stream" alt="Escritorio remoto" tabindex="0" draggable="false" />
+        <div id="keyboard-capture" tabindex="-1"></div>
+        <div id="screenHint">Haz click para dar foco al escritorio</div>
+
+        <div id="dockWrap" class="dock-wrap">
+            <div id="dock" class="dock"></div>
+        </div>
+        <div id="dockMenu" class="dock-menu hidden"></div>
+
+        
+        <div class="panel notifications-panel" id="notificationsPanel">
+            <div class="panel-head" id="notificationsHandle">
+                <div class="panel-title">Notificaciones</div>
+                <div class="small" id="notificationsCount"></div>
+                <button class="panel-close" data-close="notificationsPanel">×</button>
+            </div>
+            <div class="panel-body">
+                <div class="action-row">
+                    <button class="mini" id="clearNotificationsBtn">Borrar todas</button>
+                </div>
+                <div id="notificationsList" class="notifications-list"></div>
+            </div>
+        </div>
+
+        <div class="panel apps-window" id="appsPanel">
+            <div class="panel-head" id="appsHandle">
+                <div class="panel-title">Apps</div>
+                <div class="small" id="appsCount"></div>
+                <button class="panel-close" data-close="appsPanel">×</button>
+            </div>
+            <div class="panel-body">
+                <div class="apps-topbar">
+                    <input class="input" id="appSearch" placeholder="Buscar app..." />
+                    <button class="mini" id="appsResetBtn">Orden normal</button>
+                    <div class="small">Arrastra para reorganizar · clic derecho para opciones</div>
+                </div>
+                <div id="appsList" class="apps-grid"></div>
+            </div>
+        </div>
+        <div id="appsContextMenu" class="app-context-menu hidden"></div>
+        <div class="modal-backdrop" id="appConfirmModal">
+            <div class="sysmsg-box">
+                <div class="sysmsg-head">Desinstalar app</div>
+                <div class="sysmsg-body">
+                    <div class="sysmsg-icon">!</div>
+                    <div id="appConfirmText">¿Seguro que quieres desinstalar esta app?</div>
+                </div>
+                <div class="sysmsg-actions">
+                    <button class="mini" id="appConfirmCancel">Cancelar</button>
+                    <button class="mini" id="appConfirmOk">Desinstalar</button>
+                </div>
+            </div>
+        </div>
+        <div class="modal-backdrop" id="appInfoModal">
+            <div class="sysmsg-box">
+                <div class="sysmsg-head">Propiedades de la app</div>
+                <div class="sysmsg-body" id="appInfoBody">
+                    <img id="appInfoIcon" class="app-info-icon" alt="" />
+                    <div class="app-info-grid" id="appInfoGrid"></div>
+                </div>
+                <div class="sysmsg-actions">
+                    <button class="mini" id="appInfoClose">Cerrar</button>
+                    <button class="mini" id="appInfoDownload">Descargar icono</button>
+                </div>
+            </div>
+        </div>
+        <div class="panel" id="settingsPanel">
+
+            <div class="panel-head" id="settingsHandle"><div class="panel-title">Ajustes</div><button class="panel-close" data-close="settingsPanel">×</button></div>
+            <div class="panel-body">
+                <div class="section">
+                    <div class="section-title">Sistema</div>
+                    <div class="metric"><div>RAM</div><div><div id="ramText" class="small">Cargando...</div><div class="bar"><div id="ramBar"></div></div></div></div>
+                    <div class="metric"><div>Disco</div><div><div id="diskText" class="small">Cargando...</div><div class="bar"><div id="diskBar"></div></div></div></div>
+                    <div class="metric"><div>CPU</div><div><div id="cpuText" class="small">Cargando...</div><div class="bar"><div id="cpuBar"></div></div></div></div>
+                </div>
+                <div class="section">
+                    <div class="section-title">Fondo de pantalla</div>
+                    <div class="preset-row">
+                        <div class="preset" data-wallpaper="classic">Classic</div>
+                        <div class="preset" data-wallpaper="light">Light</div>
+                        <div class="preset" data-wallpaper="gray">Gray</div>
+                        <div class="preset" data-wallpaper="dark">Dark</div>
+                        <div class="preset" data-wallpaper="blue">Blue</div>
+                        <div class="preset" data-wallpaper="green">Green</div>
+                    </div>
+                    <div class="action-row">
+                        <button class="mini" id="uploadWpBtn">Subir imagen</button>
+                        <button class="mini" id="resetWpBtn">Reset</button>
+                        <input type="file" id="uploadWp" accept="image/*">
+                    </div>
+                    <div class="small" style="margin-top:8px;">El fondo se guarda y vuelve al reiniciar.</div>
+                </div>
+                <div class="section">
+                    <div class="section-title">Extras</div>
+                    <div class="action-row"><button class="mini" id="refreshAppsBtn">Actualizar apps</button></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel note-panel" id="notePanel">
+            <div class="panel-head" id="noteHandle"><div class="panel-title">Bloc de notas</div><button class="panel-close" data-close="notePanel">×</button></div>
+            <div class="panel-body note-body">
+                <textarea id="noteText" placeholder="Escribe aquí tus notas..."></textarea>
+                <div class="action-row">
+                    <button class="mini" id="saveNoteBtn">Guardar</button>
+                    <button class="mini" id="clearNoteBtn">Borrar</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel files-panel" id="filesPanel">
+            <div class="panel-head" id="filesHandle"><div class="panel-title">Archivos</div><button class="panel-close" data-close="filesPanel">×</button></div>
+            <div class="panel-body">
+                <div class="action-row">
+                    <button class="mini" id="homeFilesBtn">Home</button>
+                    <button class="mini" id="downloadsFilesBtn">Descargas</button>
+                    <button class="mini" id="appsFilesBtn">Apps</button>
+                    <button class="mini" id="binFilesBtn">Bin</button>
+                    <button class="mini" id="upDirBtn">Subir</button>
+                </div>
+                <input class="input" id="filesSearch" placeholder="Buscar archivo..." style="margin-top:8px;margin-bottom:8px;" />
+                <div class="small" id="filePathLabel" style="margin:6px 0 8px 0;"></div>
+                <div id="filesList"></div>
+            </div>
+        </div>
+
+        <div class="panel editor-panel" id="editorPanel">
+            <div class="panel-head" id="editorHandle"><div class="panel-title">Editor</div><button class="panel-close" data-close="editorPanel">×</button></div>
+            <div class="panel-body">
+                <div id="editorPath">Ningún archivo abierto</div>
+                <div id="editorPreview" class="editor-preview hidden"></div>
+                <textarea id="editorText" placeholder="Abre un archivo de texto para editarlo..."></textarea>
+                <div class="action-row">
+                    <button class="mini" id="editorOpenBtn">Abrir externo</button>
+                    <button class="mini" id="editorSaveBtn">Guardar</button>
+                    <button class="mini" id="editorReloadBtn">Recargar</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-backdrop" id="fileConfirmModal">
+            <div class="sysmsg-box">
+                <div class="sysmsg-head">Eliminar archivo</div>
+                <div class="sysmsg-body">
+                    <div class="sysmsg-icon">!</div>
+                    <div id="fileConfirmText">¿Seguro que quieres eliminar este archivo?</div>
+                </div>
+                <div class="sysmsg-actions">
+                    <button class="mini" id="fileConfirmCancel">Cancelar</button>
+                    <button class="mini" id="fileConfirmOk">Eliminar</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel props-panel" id="propsPanel">
+            <div class="panel-head" id="propsHandle"><div class="panel-title">Propiedades</div><button class="panel-close" data-close="propsPanel">×</button></div>
+            <div class="panel-body">
+                <div class="section">
+                    <div class="section-title" id="propsTitle">Propiedades de la app</div>
+                    <div id="propsMeta" class="small" style="margin-bottom:8px;"></div>
+                    <div id="propsInfo" class="info-grid"></div>
+                    <div class="action-row"><button class="mini" id="propsRefreshBtn">Actualizar</button></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel substitution-panel" id="substitutionPanel">
+            <div class="panel-head" id="substitutionHandle"><div class="panel-title">Sustitución</div><button class="panel-close" data-close="substitutionPanel">×</button></div>
+            <div class="panel-body">
+                <div class="section">
+                    <div class="section-title">Cambiar este hueco por otra app</div>
+                    <input class="input" id="subSearch" placeholder="Buscar app para sustituir..." style="margin-bottom:8px;" />
+                    <div class="small" id="substitutionHint" style="margin-bottom:8px;">Elige una app para reemplazar el hueco seleccionado.</div>
+                    <div id="substitutionList"></div>
+                </div>
+            </div>
+        </div>
+        <div class="sysmsg-body">
+            <div class="sysmsg-icon">!</div>
+        </div>
+        <div class="sysmsg-actions">
+        </div>
+    </div>
+</div>
+
+<div id="toastHost"></div>
+
+<script>
+const screen = document.getElementById("screen");
+const clockEl = document.getElementById("clock");
+const statusEl = document.getElementById("status");
+const appsPanel = document.getElementById("appsPanel");
+const settingsPanel = document.getElementById("settingsPanel");
+const notePanel = document.getElementById("notePanel");
+const filesPanel = document.getElementById("filesPanel");
+const editorPanel = document.getElementById("editorPanel");
+const propsPanel = document.getElementById("propsPanel");
+const substitutionPanel = document.getElementById("substitutionPanel");
+const appsBtn = document.getElementById("appsBtn");
+const settingsBtn = document.getElementById("settingsBtn");
+const filesBtn = document.getElementById("filesBtn");
+const browserBtn = document.getElementById("browserBtn");
+const editorBtn = document.getElementById("editorBtn");
+const terminalBtn = document.getElementById("terminalBtn");
+const desktopBtn = document.getElementById("desktopBtn");
+const reloadBtn = document.getElementById("reloadBtn");
+const refreshAppsBtn = document.getElementById("refreshAppsBtn");
+const notificationsBtn = document.getElementById("notificationsBtn");
+const notificationsBadge = document.getElementById("notificationsBadge");
+const notificationsPanel = document.getElementById("notificationsPanel");
+const notificationsHandle = document.getElementById("notificationsHandle");
+const notificationsList = document.getElementById("notificationsList");
+const notificationsCount = document.getElementById("notificationsCount");
+const clearNotificationsBtn = document.getElementById("clearNotificationsBtn");
+
+const appsList = document.getElementById("appsList");
+const appsCount = document.getElementById("appsCount");
+const appsResetBtn = document.getElementById("appsResetBtn");
+const appContextMenu = document.getElementById("appsContextMenu");
+const appConfirmModal = document.getElementById("appConfirmModal");
+const appConfirmText = document.getElementById("appConfirmText");
+const appConfirmCancel = document.getElementById("appConfirmCancel");
+const appConfirmOk = document.getElementById("appConfirmOk");
+const appInfoModal = document.getElementById("appInfoModal");
+const appInfoIcon = document.getElementById("appInfoIcon");
+const appInfoGrid = document.getElementById("appInfoGrid");
+const appInfoClose = document.getElementById("appInfoClose");
+const appInfoDownload = document.getElementById("appInfoDownload");
+const fileConfirmModal = document.getElementById("fileConfirmModal");
+const fileConfirmText = document.getElementById("fileConfirmText");
+const fileConfirmCancel = document.getElementById("fileConfirmCancel");
+const fileConfirmOk = document.getElementById("fileConfirmOk");
+const appSearch = document.getElementById("appSearch");
+const filesSearch = document.getElementById("filesSearch");
+const ramText = document.getElementById("ramText");
+const diskText = document.getElementById("diskText");
+const cpuText = document.getElementById("cpuText");
+const ramBar = document.getElementById("ramBar");
+const diskBar = document.getElementById("diskBar");
+const cpuBar = document.getElementById("cpuBar");
+const wallpaperOverlay = document.getElementById("wallpaperOverlay");
+const uploadWpBtn = document.getElementById("uploadWpBtn");
+const uploadWp = document.getElementById("uploadWp");
+const resetWpBtn = document.getElementById("resetWpBtn");
+const taskbar = document.getElementById("taskbar");
+const noteText = document.getElementById("noteText");
+const saveNoteBtn = document.getElementById("saveNoteBtn");
+const clearNoteBtn = document.getElementById("clearNoteBtn");
+const filesList = document.getElementById("filesList");
+const filePathLabel = document.getElementById("filePathLabel");
+const homeFilesBtn = document.getElementById("homeFilesBtn");
+const downloadsFilesBtn = document.getElementById("downloadsFilesBtn");
+const appsFilesBtn = document.getElementById("appsFilesBtn");
+const binFilesBtn = document.getElementById("binFilesBtn");
+const upDirBtn = document.getElementById("upDirBtn");
+const editorPath = document.getElementById("editorPath");
+const editorPreview = document.getElementById("editorPreview");
+const editorText = document.getElementById("editorText");
+const editorOpenBtn = document.getElementById("editorOpenBtn");
+const editorSaveBtn = document.getElementById("editorSaveBtn");
+const editorReloadBtn = document.getElementById("editorReloadBtn");
+const toastHost = document.getElementById("toastHost");
+const dockWrap = document.getElementById("dockWrap");
+const dock = document.getElementById("dock");
+const dockMenu = document.getElementById("dockMenu");
+const propsTitle = document.getElementById("propsTitle");
+const propsMeta = document.getElementById("propsMeta");
+const propsInfo = document.getElementById("propsInfo");
+const propsRefreshBtn = document.getElementById("propsRefreshBtn");
+const subSearch = document.getElementById("subSearch");
+const substitutionList = document.getElementById("substitutionList");
+const substitutionHint = document.getElementById("substitutionHint");
+const audioCtxState = { ctx: null, node: null, active: false, queue: [], queueFrames: 0, chunkOffset: 0, pump: false };
+
+const SRC_W = (window.__SCREEN_SIZE__ && window.__SCREEN_SIZE__.w) ? window.__SCREEN_SIZE__.w : 1920;
+const SRC_H = (window.__SCREEN_SIZE__ && window.__SCREEN_SIZE__.h) ? window.__SCREEN_SIZE__.h : 1080;
+const SRC_RATIO = SRC_W / SRC_H;
+
+let apps = [];
+let appGridOrder = JSON.parse(localStorage.getItem("app-grid-order") || "[]");
+let draggedAppKey = null;
+let contextTargetApp = null;
+let confirmDeleteTarget = null;
+let fileDeleteTarget = null;
+let appInfoTarget = null;
+let zTop = 30;
+let currentFilesPath = "~/Downloads";
+let currentEditorPath = "";
+let currentFilesEntries = [];
+let dockConfig = JSON.parse(localStorage.getItem("dock-config") || "null");
+let dockSelectedSlot = null;
+let dockVisibleTimer = null;
+let dockForceVisibleUntil = 0;
+let dockHovering = false;
+let fullscreenOpen = false;
+let appsRevisionSeen = 0;
+let initialAppsLoaded = false;
+let knownApps = new Set();
+let lastMouseEvent = null;
+let currentPropsSlotIndex = null;
+let currentDockTargetIndex = null;
+let mouseMoveQueued = null;
+let notifications = JSON.parse(localStorage.getItem("cloud-notifications") || "[]");
+let notificationsOpen = false;
+let appDragState = null;
+
+let mouseMoveRAF = 0;
+let mouseMoveLastSent = 0;
+let isDragging = false;
+let dragStartPos = null;
+let lastVirtualPos = null;
+
+if (!dockConfig || !Array.isArray(dockConfig) || dockConfig.length !== 8) {
+    dockConfig = [
+        { name: "Terminal", exec: "xterm", icon: "utilities-terminal" },
+        { name: "Files", exec: "nautilus .", icon: "system-file-manager" },
+        { name: "Firefox", exec: "firefox --new-window", icon: "firefox" },
+        { name: "Editor", exec: "gedit", icon: "accessories-text-editor" },
+        { name: "Blender", exec: "blender", icon: "blender" },
+        { name: "LibreOffice", exec: "libreoffice", icon: "libreoffice-writer" },
+        { name: "Code", exec: "code", icon: "code" },
+        { name: "Browser", exec: "chromium --new-window", icon: "chromium" }
+    ];
+    localStorage.setItem("dock-config", JSON.stringify(dockConfig));
+}
+
+const wallpapers = {
+    classic: { css: "linear-gradient(135deg, #d6d6d6 0%, #ececec 100%)" },
+    light:   { css: "linear-gradient(135deg, #ececec 0%, #f7f7f7 100%)" },
+    gray:    { css: "linear-gradient(135deg, #bcbcbc 0%, #d8d8d8 100%)" },
+    dark:    { css: "linear-gradient(135deg, #2b2b2b 0%, #4a4a4a 100%)" },
+    blue:    { css: "linear-gradient(135deg, #8ba8c9 0%, #dce6f2 100%)" },
+    green:   { css: "linear-gradient(135deg, #98bfa2 0%, #e7f0ea 100%)" }
+};
+
+function toast(message, timeout = 3000) {
+    const el = document.createElement("div");
+    el.className = "toast";
+    el.textContent = message;
+    toastHost.appendChild(el);
+    setTimeout(() => {
+        el.style.opacity = "0";
+        el.style.transform = "translateY(8px)";
+        el.style.transition = "opacity .2s ease, transform .2s ease";
+        setTimeout(() => el.remove(), 220);
+    }, timeout);
+}
+
+function saveNotifications() {
+    localStorage.setItem("cloud-notifications", JSON.stringify(notifications.slice(0, 100)));
+}
+
+function fmtTime(ts) {
+    try {
+        return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    } catch {
+        return "";
+    }
+}
+
+function pushNotification(title, message) {
+    notifications.unshift({
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        title: String(title || "Notificación"),
+        message: String(message || ""),
+        time: Date.now()
+    });
+    notifications = notifications.slice(0, 100);
+    saveNotifications();
+    renderNotifications();
+}
+
+function removeNotification(id) {
+    notifications = notifications.filter(n => n.id !== id);
+    saveNotifications();
+    renderNotifications();
+}
+
+function clearNotifications() {
+    notifications = [];
+    saveNotifications();
+    renderNotifications();
+}
+
+function renderNotifications() {
+    const count = notifications.length;
+    const badgeText = count > 999 ? "999+" : String(count);
+    notificationsCount.textContent = "";
+    notificationsBadge.textContent = badgeText;
+    notificationsBadge.classList.toggle("hidden", count === 0);
+    notificationsList.innerHTML = "";
+    if (!count) {
+        notificationsList.innerHTML = '<div class="notification-empty">No hay notificaciones todavía.</div>';
+        return;
+    }
+    for (const n of notifications) {
+        const row = document.createElement("div");
+        row.className = "notification-item";
+        row.innerHTML = `
+            <div>
+                <div class="title">${escapeHtml(n.title)}</div>
+                <div class="msg">${escapeHtml(n.message)}</div>
+                <div class="time">${escapeHtml(fmtTime(n.time))}</div>
+            </div>
+            <button class="mini" title="Borrar">×</button>
+        `;
+        row.querySelector("button").addEventListener("click", () => removeNotification(n.id));
+        notificationsList.appendChild(row);
+    }
+}
+
+function toggleNotificationsPanel(force) {
+    const show = typeof force === "boolean" ? force : !notificationsPanel.classList.contains("show");
+    notificationsPanel.classList.toggle("show", show);
+    if (show) {
+        appsPanel.classList.remove("show");
+        bringToFront(notificationsPanel);
+        renderNotifications();
+    }
+    return show;
+}
+
+
+function postJSON(path, data) {
+    return fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data || {})
+    }).then(r => r.json());
+}
+
+function bringToFront(el) {
+    zTop += 1;
+    el.style.zIndex = zTop;
+}
+
+function setPanelVisible(panel, visible) {
+    panel.classList.toggle("show", visible);
+    if (visible) bringToFront(panel);
+}
+
+function toggleAppsPanel(force) {
+    const show = typeof force === "boolean" ? force : !appsPanel.classList.contains("show");
+    appsPanel.classList.toggle("show", show);
+    if (show) {
+        notificationsPanel.classList.remove("show");
+        bringToFront(appsPanel);
+    }
+    return show;
+}
+
+function toggleNotificationsPanel(force) {
+    const show = typeof force === "boolean" ? force : !notificationsPanel.classList.contains("show");
+    notificationsPanel.classList.toggle("show", show);
+    if (show) {
+        appsPanel.classList.remove("show");
+        bringToFront(notificationsPanel);
+        renderNotifications();
+    }
+    return show;
+}
+
+function hideAllPanels() {
+    appsPanel.classList.remove("show");
+    settingsPanel.classList.remove("show");
+    notePanel.classList.remove("show");
+    filesPanel.classList.remove("show");
+    editorPanel.classList.remove("show");
+    propsPanel.classList.remove("show");
+    substitutionPanel.classList.remove("show");
+    notificationsPanel.classList.remove("show");
+}
+
+function forceKeyboardFocus() {
+    if (
+        document.activeElement !== appSearch &&
+        document.activeElement !== uploadWp &&
+        document.activeElement !== noteText &&
+        document.activeElement !== editorText &&
+        document.activeElement !== filesSearch &&
+        document.activeElement !== subSearch
+    ) {
+        screen.focus({ preventScroll: true });
+    }
+}
+
+function makeDraggable(panel, handle) {
+    let dragging = false;
+    let startX, startY, originX, originY;
+    handle.addEventListener("pointerdown", (e) => {
+        if (e.target.closest("button")) return;
+        dragging = true;
+        bringToFront(panel);
+        const rect = panel.getBoundingClientRect();
+        const parentRect = document.getElementById("desktop").getBoundingClientRect();
+        originX = rect.left - parentRect.left;
+        originY = rect.top - parentRect.top;
+        startX = e.clientX;
+        startY = e.clientY;
+        handle.setPointerCapture(e.pointerId);
+        document.body.style.cursor = "grabbing";
+    });
+    handle.addEventListener("pointermove", (e) => {
+        if (!dragging) return;
+        const parentRect = document.getElementById("desktop").getBoundingClientRect();
+        const pW = panel.getBoundingClientRect().width;
+        const pH = panel.getBoundingClientRect().height;
+        let x = originX + (e.clientX - startX);
+        let y = originY + (e.clientY - startY);
+        x = Math.max(0, Math.min(parentRect.width - pW, x));
+        y = Math.max(0, Math.min(parentRect.height - pH, y));
+        panel.style.left = `${x}px`;
+        panel.style.top = `${y}px`;
+    });
+    const endDrag = () => {
+        dragging = false;
+        document.body.style.cursor = "default";
+        if (lastMouseEvent) updateCursorFromEvent(lastMouseEvent);
+    };
+    handle.addEventListener("pointerup", endDrag);
+    handle.addEventListener("pointercancel", endDrag);
+}
+
+function escapeHtml(str) {
+    return String(str).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+}
+
+function fmtBytes(n) {
+    if (n === null || n === undefined) return "N/D";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let value = Number(n), i = 0;
+    while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
+    return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[i]}`;
+}
+
+function getVirtualCoords(e) {
+    const rect = screen.getBoundingClientRect();
+    const containerRatio = rect.width / rect.height;
+    let drawW, drawH, offsetX, offsetY;
+    if (containerRatio > SRC_RATIO) {
+        drawH = rect.height;
+        drawW = drawH * SRC_RATIO;
+        offsetX = (rect.width - drawW) / 2;
+        offsetY = 0;
+    } else {
+        drawW = rect.width;
+        drawH = drawW / SRC_RATIO;
+        offsetX = 0;
+        offsetY = (rect.height - drawH) / 2;
+    }
+    const x = ((e.clientX - rect.left - offsetX) / drawW) * SRC_W;
+    const y = ((e.clientY - rect.top - offsetY) / drawH) * SRC_H;
+    return { x: Math.max(0, Math.min(SRC_W - 1, x)), y: Math.max(0, Math.min(SRC_H - 1, y)) };
+}
+
+function iconUrl(name) {
+    return "/api/icon?name=" + encodeURIComponent(name || "application-x-executable");
+}
+
+function setPageWallpaperFromState(state) {
+    if (!state) return;
+    if (state.mode === "image") {
+        const url = `/api/wallpaper-current?t=${Date.now()}`;
+        document.documentElement.style.setProperty("--desktop-bg", `url("${url}") center/cover fixed no-repeat`);
+        document.body.style.background = `url("${url}") center/cover fixed no-repeat`;
+        wallpaperOverlay.style.background = `url("${url}") center/cover no-repeat`;
+    } else {
+        const wp = wallpapers[state.name] || wallpapers.classic;
+        document.documentElement.style.setProperty("--desktop-bg", wp.css);
+        document.body.style.background = wp.css;
+        wallpaperOverlay.style.background = wp.css;
+    }
+}
+
+async function syncWallpaperState() {
+    try {
+        const res = await fetch("/api/wallpaper-state?t=" + Date.now());
+        const data = await res.json();
+        if (data.ok) setPageWallpaperFromState(data);
+    } catch {}
+}
+
+function cursorNearResizeCorner(el, x, y) {
+    const r = el.getBoundingClientRect();
+    return x > r.right - 14 && y > r.bottom - 14;
+}
+
+function updateCursorFromEvent(e) {
+    if (!e || document.body.classList.contains("busy")) return;
+    lastMouseEvent = e;
+    const target = e.target;
+    let cursor = "default";
+    if (target === screen) {
+        cursor = screen._isDragging ? "grabbing" : "default";
+    } else if (target.closest && target.closest('textarea, input, [contenteditable="true"]')) {
+        cursor = "text";
+    } else if (target.closest && target.closest(".panel-head")) {
+        cursor = "move";
+    } else if (target.closest && target.closest("button, .tb-btn, .mini, .panel-close, .task-close-btn, .task-max-btn, .app-item, .file-row, .dock-slot, .dock-menu button, .exec-row")) {
+        cursor = "pointer";
+    } else if (target.closest && target.closest(".panel")) {
+        const panel = target.closest(".panel");
+        if (cursorNearResizeCorner(panel, e.clientX, e.clientY)) cursor = "nwse-resize";
+        else cursor = "default";
+    }
+    document.body.style.cursor = cursor;
+    if (target === screen) screen.style.cursor = screen._isDragging ? "grabbing" : "default";
+}
+
+function queueMouseMove(pos) {
+    mouseMoveQueued = pos;
+    if (mouseMoveRAF) return;
+    mouseMoveRAF = requestAnimationFrame(() => {
+        mouseMoveRAF = 0;
+        const now = performance.now();
+        if (now - mouseMoveLastSent < 16) {
+            if (mouseMoveQueued) queueMouseMove(mouseMoveQueued);
+            return;
+        }
+        mouseMoveLastSent = now;
+        if (mouseMoveQueued) postJSON("/api/mousemove", mouseMoveQueued);
+        mouseMoveQueued = null;
+    });
+}
+
+function saveDockConfig() {
+    localStorage.setItem("dock-config", JSON.stringify(dockConfig));
+}
+
+function renderDock() {
+    dock.innerHTML = "";
+    dockConfig.slice(0, 8).forEach((slot, idx) => {
+        const btn = document.createElement("button");
+        btn.className = "dock-slot";
+        btn.title = slot.name || "App";
+        btn.innerHTML = `
+            <img src="${iconUrl(slot.icon || "application-x-executable")}" onerror="this.src='${iconUrl("application-x-executable")}'" />
+            <div class="dock-label">${escapeHtml(slot.name || "App")}</div>
+        `;
+        btn.addEventListener("click", async () => {
+            await launchApp(slot.name || "App", slot.exec || "", (slot.name || "").split(" ")[0]);
+        });
+        btn.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            openDockMenu(idx, e.clientX, e.clientY);
+        });
+        dock.appendChild(btn);
+    });
+}
+
+function openDockMenu(slotIndex, x, y) {
+    const slot = dockConfig[slotIndex];
+    dockSelectedSlot = slotIndex;
+    dockMenu.innerHTML = "";
+    const makeBtn = (text, handler) => {
+        const b = document.createElement("button");
+        b.textContent = text;
+        b.addEventListener("click", () => {
+            hideDockMenu();
+            handler();
+        });
+        dockMenu.appendChild(b);
+    };
+    makeBtn("Sustituir", () => openSubstitutionPanel(slotIndex));
+    makeBtn("Propiedades", () => openPropertiesPanel(slotIndex));
+    makeBtn("Descargar icono", async () => {
+        try {
+            const res = await postJSON("/api/download-icon", { icon: slot.icon || "application-x-executable", name: slot.name || "icon" });
+            if (res.ok) toast(`Guardado en Descargas: ${res.filename}`);
+            else toast(res.error || "No se pudo guardar");
+        } catch {
+            toast("No se pudo guardar");
+        }
+    });
+    dockMenu.classList.remove("hidden");
+    dockMenu.style.visibility = "hidden";
+    requestAnimationFrame(() => {
+        const h = dockMenu.getBoundingClientRect().height || 140;
+        dockMenu.style.left = `${Math.max(8, Math.min(window.innerWidth - 190, x))}px`;
+        dockMenu.style.top = `${Math.max(8, y - h - 12)}px`;
+        dockMenu.style.visibility = "visible";
+    });
+}
+
+function hideDockMenu() {
+    dockMenu.classList.add("hidden");
+    dockMenu.style.visibility = "";
+}
+
+function setBusyStateForLaunch(label = "Abriendo...") {
+    document.body.classList.add("busy");
+    statusEl.textContent = label;
+    screen.style.cursor = "wait";
+}
+
+function endBusyState() {
+    document.body.classList.remove("busy");
+    screen.style.cursor = "default";
+    if (lastMouseEvent) updateCursorFromEvent(lastMouseEvent);
+}
+
+async function waitForWindowHint(beforeIds, hint, timeoutMs = 10000) {
+    const start = Date.now();
+    const h = (hint || "").toLowerCase();
+    while (Date.now() - start < timeoutMs) {
+        try {
+            const res = await fetch("/api/windows?t=" + Date.now());
+            const winList = await res.json();
+            const afterIds = new Set(winList.map(w => w.id));
+            const newWindow = winList.find(w => !beforeIds.has(w.id));
+            const matched = winList.find(w => {
+                const title = (w.title || "").toLowerCase();
+                const cls = (w.class || "").toLowerCase();
+                return h && (title.includes(h) || cls.includes(h));
+            });
+            if (newWindow || matched || afterIds.size > beforeIds.size) return true;
+        } catch {}
+        await new Promise(r => setTimeout(r, 350));
+    }
+    return false;
+}
+
+function assignSelectedAppToDock(app) {
+    const target = currentDockTargetIndex;
+    if (target === null || target === undefined) return false;
+    dockConfig[target] = {
+        name: app.name,
+        exec: app.exec,
+        icon: app.icon || "application-x-executable"
+    };
+    saveDockConfig();
+    renderDock();
+    toast(`Hueco ${target + 1} sustituido por ${app.name}`);
+    currentDockTargetIndex = null;
+    dockSelectedSlot = null;
+    hideDockMenu();
+    substitutionPanel.classList.remove("show");
+    return true;
+}
+
+
+function openSubstitutionPanel(slotIndex) {
+    const slot = dockConfig[slotIndex];
+    if (!slot) return;
+    currentDockTargetIndex = slotIndex;
+    substitutionHint.textContent = `Sustituyendo el hueco ${slotIndex + 1}: ${slot.name || "App"}`;
+    appsPanel.classList.remove("show");
+    notificationsPanel.classList.remove("show");
+    setPanelVisible(substitutionPanel, true);
+    renderSubstitutionApps(subSearch.value);
+}
+
+async function loadAppProperties(slotIndex) {
+    const slot = dockConfig[slotIndex];
+    if (!slot) return;
+    currentPropsSlotIndex = slotIndex;
+    propsTitle.textContent = `Propiedades de ${slot.name || "App"}`;
+    propsMeta.textContent = `Hueco ${slotIndex + 1}`;
+    propsInfo.innerHTML = '<div class="info-key">Cargando...</div><div class="info-value">Un momento</div>';
+    setPanelVisible(propsPanel, true);
+    try {
+        const res = await postJSON("/api/app-info", slot);
+        if (!res.ok) throw new Error("bad");
+        const info = res;
+        const proc = info.process;
+        propsInfo.innerHTML = `
+            <div class="info-key">Nombre</div><div class="info-value">${escapeHtml(info.name || "")}</div>
+            <div class="info-key">Comando</div><div class="info-value">${escapeHtml(info.exec || "")}</div>
+            <div class="info-key">Launcher</div><div class="info-value">${escapeHtml(info.path || "—")}</div>
+            <div class="info-key">De sistema</div><div class="info-value">${info.deletable ? "No" : "Sí"}</div>
+            <div class="info-key">Launcher size</div><div class="info-value">${info.launcher_size ? fmtBytes(info.launcher_size) : "—"}</div>
+            <div class="info-key">Binario</div><div class="info-value">${escapeHtml(info.binary_path || "—")}</div>
+            <div class="info-key">Binario size</div><div class="info-value">${info.binary_size ? fmtBytes(info.binary_size) : "—"}</div>
+            <div class="info-key">Proceso</div><div class="info-value">${proc ? `${escapeHtml(proc.name || "")} (PID ${proc.pid})` : "No detectado"}</div>
+            <div class="info-key">CPU</div><div class="info-value">${proc ? `${Number(proc.cpu || 0).toFixed(1)}%` : "—"}</div>
+            <div class="info-key">RAM</div><div class="info-value">${proc && proc.rss != null ? fmtBytes(proc.rss) : "—"}</div>
+        `;
+    } catch {
+        propsInfo.innerHTML = '<div class="info-key">Error</div><div class="info-value">No se pudieron cargar las propiedades</div>';
+    }
+}
+
+function openPropertiesPanel(slotIndex) {
+    loadAppProperties(slotIndex);
+}
+
+async function launchApp(name, exec, hint = "") {
+    try {
+        // Normal launch only. Substitution is handled in the substitution window.
+        const before = await fetch("/api/windows").then(r => r.json());
+        const beforeIds = new Set(before.map(w => w.id));
+        setBusyStateForLaunch("Abriendo app...");
+        const res = await postJSON("/api/launch", { exec, name });
+        if (!res.ok) {
+            endBusyState();
+            toast("No se pudo abrir la app");
+            return;
+        }
+        await waitForWindowHint(beforeIds, hint || name || exec, 9000);
+        endBusyState();
+        showDock();
+        forceKeyboardFocus();
+    } catch {
+        endBusyState();
+        toast("No se pudo abrir la app");
+    }
+}
+
+async function launchToolbarAction(action, hint) {
+    try {
+        const before = await fetch("/api/windows").then(r => r.json());
+        const beforeIds = new Set(before.map(w => w.id));
+        setBusyStateForLaunch("Abriendo...");
+        const res = await postJSON("/api/toolbar-action", { action });
+        if (!res.ok) {
+            endBusyState();
+            toast(res.error || "No se pudo abrir");
+            return;
+        }
+        await waitForWindowHint(beforeIds, hint || action, 9000);
+        endBusyState();
+        showDock();
+        forceKeyboardFocus();
+    } catch {
+        endBusyState();
+        toast("No se pudo abrir");
+    }
+}
+
+
+function appKey(app) {
+    return String(app?.path || app?.exec || app?.name || "").toLowerCase();
+}
+
+function saveAppGridOrder(order) {
+    localStorage.setItem("app-grid-order", JSON.stringify(order));
+}
+
+function normalizeAppOrder(list) {
+    const keys = new Set(list.map(appKey));
+    const next = [];
+    for (const k of appGridOrder) {
+        if (keys.has(k) && !next.includes(k)) next.push(k);
+    }
+    for (const app of list) {
+        const k = appKey(app);
+        if (!next.includes(k)) next.push(k);
+    }
+    appGridOrder = next;
+    saveAppGridOrder(appGridOrder);
+}
+
+function orderedApps(list) {
+    const order = new Map(appGridOrder.map((k, i) => [k, i]));
+    return [...list].sort((a, b) => {
+        const ia = order.has(appKey(a)) ? order.get(appKey(a)) : 1e9;
+        const ib = order.has(appKey(b)) ? order.get(appKey(b)) : 1e9;
+        if (ia !== ib) return ia - ib;
+        return (a.name || "").localeCompare(b.name || "", "es");
+    });
+}
+
+function reorderAppGrid(fromKey, toKey) {
+    if (!fromKey || !toKey || fromKey === toKey) return;
+    const arr = [...appGridOrder];
+    const from = arr.indexOf(fromKey);
+    const to = arr.indexOf(toKey);
+    if (from === -1 || to === -1) return;
+    arr.splice(from, 1);
+    arr.splice(to, 0, fromKey);
+    appGridOrder = arr;
+    saveAppGridOrder(appGridOrder);
+}
+
+function hideAppContextMenu() {
+    appContextMenu.classList.add("hidden");
+    appContextMenu.style.left = "";
+    appContextMenu.style.top = "";
+    contextTargetApp = null;
+}
+
+function hideAppConfirmModal() {
+    appConfirmModal.classList.remove("show");
+    confirmDeleteTarget = null;
+}
+
+function showFileConfirmModal(path, name) {
+    fileDeleteTarget = { path, name };
+    fileConfirmText.textContent = `¿Seguro que quieres eliminar ${name}?`;
+    fileConfirmModal.classList.add("show");
+    bringToFront(fileConfirmModal);
+}
+
+function hideFileConfirmModal() {
+    fileConfirmModal.classList.remove("show");
+    fileDeleteTarget = null;
+}
+
+function showAppConfirmModal(app) {
+    confirmDeleteTarget = app;
+    appConfirmText.textContent = `¿Seguro que quieres desinstalar "${app.name}"?`;
+    appConfirmModal.classList.add("show");
+}
+
+async function downloadAppIcon(app) {
+    try {
+        const res = await postJSON("/api/download-icon", { icon: app.icon || "application-x-executable", name: app.name || "icon" });
+        if (res.ok) { toast(`Icono guardado en Descargas: ${res.filename}`); pushNotification("Archivos", `Icono guardado en Descargas: ${res.filename}`); }
+        else toast(res.error || "No se pudo guardar");
+    } catch {
+        toast("No se pudo guardar");
+    }
+}
+
+async function showAppInfo(app) {
+    appInfoTarget = app;
+    try {
+        const res = await postJSON("/api/app-info", app);
+        if (!res.ok) throw new Error("bad");
+        const info = res;
+        const proc = info.process;
+        appInfoIcon.src = iconUrl(app.icon || "application-x-executable");
+        appInfoGrid.innerHTML = `
+            <div class="info-key">Nombre</div><div class="info-value">${escapeHtml(info.name || "")}</div>
+            <div class="info-key">Comando</div><div class="info-value">${escapeHtml(info.exec || "")}</div>
+            <div class="info-key">Launcher</div><div class="info-value">${escapeHtml(info.path || "—")}</div>
+            <div class="info-key">De sistema</div><div class="info-value">${info.deletable ? "No" : "Sí"}</div>
+            <div class="info-key">Launcher size</div><div class="info-value">${info.launcher_size ? fmtBytes(info.launcher_size) : "—"}</div>
+            <div class="info-key">Binario</div><div class="info-value">${escapeHtml(info.binary_path || "—")}</div>
+            <div class="info-key">Binario size</div><div class="info-value">${info.binary_size ? fmtBytes(info.binary_size) : "—"}</div>
+            <div class="info-key">Proceso</div><div class="info-value">${proc ? `${escapeHtml(proc.name || "")} (PID ${proc.pid})` : "No detectado"}</div>
+            <div class="info-key">CPU</div><div class="info-value">${proc ? `${Number(proc.cpu || 0).toFixed(1)}%` : "—"}</div>
+            <div class="info-key">RAM</div><div class="info-value">${proc && proc.rss != null ? fmtBytes(proc.rss) : "—"}</div>
+        `;
+        appInfoModal.classList.add("show");
+    } catch {
+        appInfoIcon.src = iconUrl(app.icon || "application-x-executable");
+        appInfoGrid.innerHTML = `<div class="info-key">Error</div><div class="info-value">No se pudieron cargar las propiedades</div>`;
+        appInfoModal.classList.add("show");
+    }
+}
+
+function openAppsContextMenu(app, x, y) {
+    contextTargetApp = app;
+    appContextMenu.innerHTML = "";
+    const add = (label, handler, disabled = false) => {
+        const btn = document.createElement("button");
+        btn.textContent = label;
+        if (disabled) btn.classList.add("disabled");
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            hideAppContextMenu();
+            if (!disabled) handler();
+        });
+        appContextMenu.appendChild(btn);
+    };
+    add("Abrir", () => launchApp(app.name, app.exec, (app.name || "").split(" ")[0]));
+    add("Propiedades", () => showAppInfo(app));
+    add("Descargar icono", () => downloadAppIcon(app));
+    add("Eliminar app", () => showAppConfirmModal(app), !app.deletable);
+    appContextMenu.classList.remove("hidden");
+    const rect = document.getElementById("desktop").getBoundingClientRect();
+    const xPos = Math.min(rect.width - 240, Math.max(12, x - rect.left));
+    const yPos = Math.min(rect.height - 180, Math.max(12, y - rect.top));
+    appContextMenu.style.left = `${xPos}px`;
+    appContextMenu.style.top = `${yPos}px`;
+}
+
+function renderApps(filter = "") {
+    const q = filter.trim().toLowerCase();
+    appsList.innerHTML = "";
+    normalizeAppOrder(apps);
+    const list = orderedApps(apps).filter(a => {
+        if (!q) return true;
+        return (a.name || "").toLowerCase().includes(q) || (a.exec || "").toLowerCase().includes(q);
+    });
+    appsCount.textContent = `${list.length} app${list.length === 1 ? "" : "s"}`;
+
+    for (const app of list) {
+        const key = appKey(app);
+        const item = document.createElement("div");
+        item.className = "app-card";
+        item.dataset.key = key;
+        item.innerHTML = `
+            <img class="app-icon" src="${iconUrl(app.icon)}" onerror="this.src='${iconUrl('application-x-executable')}'" />
+            <div class="app-card-title">${escapeHtml(app.name)}</div>
+            <div class="app-card-sub">${escapeHtml(app.exec)}</div>
+        `;
+
+        let pressed = false;
+        let moved = false;
+        let pointerId = null;
+        let overKey = null;
+        let startX = 0;
+        let startY = 0;
+
+        const clearDropMarks = () => appsList.querySelectorAll(".drop-target").forEach(el => el.classList.remove("drop-target"));
+        const nearestCard = (x, y) => {
+            const el = document.elementFromPoint(x, y);
+            return el && el.closest ? el.closest(".app-card") : null;
+        };
+
+        item.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return;
+            pressed = true;
+            moved = false;
+            pointerId = e.pointerId;
+            startX = e.clientX;
+            startY = e.clientY;
+            appDragState = { key, app, item, pointerId };
+            try { item.setPointerCapture(pointerId); } catch {}
+        });
+
+        item.addEventListener("pointermove", (e) => {
+            if (!pressed || e.pointerId !== pointerId) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            if (!moved && Math.hypot(dx, dy) > 6) {
+                moved = true;
+                item.classList.add("dragging");
+            }
+            if (moved) {
+                const target = nearestCard(e.clientX, e.clientY);
+                clearDropMarks();
+                if (target && target.dataset && target.dataset.key && target.dataset.key !== key) {
+                    target.classList.add("drop-target");
+                    overKey = target.dataset.key;
+                } else {
+                    overKey = null;
+                }
+            }
+        });
+
+        const finish = async (e) => {
+            if (!pressed || e.pointerId !== pointerId) return;
+            pressed = false;
+            clearDropMarks();
+            item.classList.remove("dragging");
+            try { item.releasePointerCapture(pointerId); } catch {}
+            appDragState = null;
+
+            if (moved) {
+                if (overKey && overKey !== key) {
+                    reorderAppGrid(key, overKey);
+                    renderApps(appSearch.value);
+                }
+                return;
+            }
+
+            if (currentDockTargetIndex !== null && currentDockTargetIndex !== undefined) {
+                assignSelectedAppToDock(app);
+                renderApps(appSearch.value);
+                return;
+            }
+
+            await launchApp(app.name, app.exec, (app.name || "").split(" ")[0]);
+        };
+
+        item.addEventListener("pointerup", finish);
+        item.addEventListener("pointercancel", () => {
+            pressed = false;
+            clearDropMarks();
+            item.classList.remove("dragging");
+            appDragState = null;
+        });
+
+        item.addEventListener("contextmenu", (e) => {
+            e.preventDefault();
+            openAppsContextMenu(app, e.clientX, e.clientY);
+        });
+
+        appsList.appendChild(item);
+    }
+}
+
+
+function renderSubstitutionApps(filter = "") {
+    const q = filter.trim().toLowerCase();
+    substitutionList.innerHTML = "";
+    normalizeAppOrder(apps);
+    const list = orderedApps(apps).filter(a => {
+        if (!q) return true;
+        return (a.name || "").toLowerCase().includes(q) || (a.exec || "").toLowerCase().includes(q);
+    });
+
+    if (!list.length) {
+        substitutionList.innerHTML = '<div class="app-card">No hay apps disponibles</div>';
+        return;
+    }
+
+    for (const app of list) {
+        const item = document.createElement("div");
+        item.className = "app-card";
+        item.dataset.key = appKey(app);
+        item.innerHTML = `
+            <img class="app-icon" src="${iconUrl(app.icon)}" onerror="this.src='${iconUrl('application-x-executable')}'" />
+            <div class="app-card-title">${escapeHtml(app.name)}</div>
+            <div class="app-card-sub">${escapeHtml(app.exec)}</div>
+        `;
+        item.addEventListener("click", () => {
+            assignSelectedAppToDock(app);
+        });
+        substitutionList.appendChild(item);
+    }
+}
+async function loadApps(force = false) {
+    try {
+        const res = await fetch("/api/apps" + (force ? "?t=" + Date.now() : ""));
+        const nextApps = await res.json();
+        if (!initialAppsLoaded) {
+            initialAppsLoaded = true;
+            try {
+                const rev = await fetch("/api/apps-revision?t=" + Date.now()).then(r => r.json());
+                appsRevisionSeen = rev.revision || 0;
+            } catch {}
+        }
+        knownApps = new Set(nextApps.map(a => (a.name || "").toLowerCase()));
+        apps = nextApps;
+        normalizeAppOrder(apps);
+        renderApps(appSearch.value);
+        if (force) pushNotification("Apps", "Se actualizó la lista de aplicaciones.");
+    } catch {
+        if (!apps.length) {
+            appsList.innerHTML = '<div class="app-card">Cargando apps...</div>';
+            setTimeout(() => loadApps(true), 800);
+        }
+    }
+}
+
+async function pollAppsRevision() {
+    try {
+        const res = await fetch("/api/apps-revision?t=" + Date.now());
+        const data = await res.json();
+        if (data.ok && data.revision !== appsRevisionSeen) {
+            appsRevisionSeen = data.revision;
+            toast(`Se instaló una nueva app y se añadió a "Apps"`);
+            pushNotification("Apps", 'Se instaló una nueva app y se añadió a "Apps".');
+            await loadApps(true);
+        }
+    } catch {}
+}
+
+function checkReady() {
+    fetch("/ready").then(r => r.json()).then(data => {
+        statusEl.textContent = data.ready ? "Listo" : "Preparando...";
+    }).catch(() => { statusEl.textContent = "Sin conexión"; });
+}
+
+function updateClock() {
+    const now = new Date();
+    clockEl.textContent = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function updateSystemInfo() {
+    fetch("/api/system").then(r => r.json()).then(data => {
+        if (data.ram) {
+            ramText.textContent = `${fmtBytes(data.ram.used)} / ${fmtBytes(data.ram.total)} (${data.ram.percent}%)`;
+            ramBar.style.width = `${Math.max(0, Math.min(100, data.ram.percent))}%`;
+        } else {
+            ramText.textContent = "No disponible";
+            ramBar.style.width = "0%";
+        }
+        if (data.disk) {
+            diskText.textContent = `${fmtBytes(data.disk.used)} / ${fmtBytes(data.disk.total)} (${data.disk.percent}%)`;
+            diskBar.style.width = `${Math.max(0, Math.min(100, data.disk.percent))}%`;
+        }
+        if (typeof data.cpu === "number") {
+            cpuText.textContent = `${data.cpu.toFixed(1)}%`;
+            cpuBar.style.width = `${Math.max(0, Math.min(100, data.cpu))}%`;
+        } else {
+            cpuText.textContent = "No disponible";
+            cpuBar.style.width = "0%";
+        }
+    }).catch(() => {});
+}
+
+function syncDockVisibility() {
+    if (!fullscreenOpen) {
+        dockWrap.classList.add("show");
+        return;
+    }
+    if (dockHovering) showDock(); else hideDockSoon();
+}
+
+async function updateTaskbar() {
+    try {
+        const res = await fetch("/api/windows?t=" + Date.now());
+        const windows = await res.json();
+        fullscreenOpen = windows.some(w => w.fullscreen);
+        if (windows.length === 0) {
+            taskbar.innerHTML = "";
+            syncDockVisibility();
+            return;
+        }
+        taskbar.innerHTML = "";
+        for (const win of windows) {
+            const item = document.createElement("div");
+            item.className = "task-item" + (win.minimized ? " minimized" : "");
+            item.innerHTML = `
+                <img class="task-icon" src="${iconUrl(win.icon)}" onerror="this.src='${iconUrl('application-x-executable')}'" />
+                <span class="task-title">${escapeHtml(win.title)}</span>
+                <button class="task-max-btn" title="Maximizar">▢</button>
+                <button class="task-close-btn" title="Cerrar">×</button>
+            `;
+            item.addEventListener("click", async (e) => {
+                if (e.target.classList.contains("task-close-btn") || e.target.classList.contains("task-max-btn")) return;
+                if (win.minimized) await postJSON("/api/minimize", { id: win.id, action: "restore" });
+                else await postJSON("/api/minimize", { id: win.id, action: "minimize" });
+                setTimeout(updateTaskbar, 200);
+            });
+            item.querySelector(".task-close-btn").addEventListener("click", async (e) => {
+                e.stopPropagation();
+                await postJSON("/api/close", { id: win.id });
+                setTimeout(updateTaskbar, 400);
+            });
+            item.querySelector(".task-max-btn").addEventListener("click", async (e) => {
+                e.stopPropagation();
+                await postJSON("/api/maximize", { id: win.id });
+                setTimeout(updateTaskbar, 200);
+            });
+            taskbar.appendChild(item);
+        }
+        syncDockVisibility();
+    } catch {}
+}
+
+
+
+async function openFileInEditor(path) {
+    const name = String(path || "").split("/").pop() || path;
+    currentEditorPath = path;
+    editorPath.textContent = path;
+    setPanelVisible(editorPanel, true);
+    bringToFront(editorPanel);
+
+    editorPreview.classList.remove("hidden");
+    editorText.classList.add("hidden");
+    editorPreview.innerHTML = "";
+
+    if (isImageFile(name)) {
+        const img = document.createElement("img");
+        img.src = fileRawUrl(path);
+        img.alt = name;
+        img.className = "editor-media-preview";
+        editorPreview.appendChild(img);
+        editorSaveBtn.disabled = true;
+        return;
+    }
+
+    if (isVideoFile(name)) {
+        const video = document.createElement("video");
+        video.src = fileRawUrl(path);
+        video.controls = true;
+        video.autoplay = false;
+        video.playsInline = true;
+        video.preload = "metadata";
+        video.className = "editor-media-preview";
+        editorPreview.appendChild(video);
+        editorSaveBtn.disabled = true;
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/file/read?path=" + encodeURIComponent(path));
+        const data = await res.json();
+        if (!data.ok) {
+            editorPreview.innerHTML = '<div class="placeholder">No se pudo leer este archivo como texto.</div>';
+            editorSaveBtn.disabled = true;
+            return;
+        }
+        editorPreview.classList.add("hidden");
+        editorText.classList.remove("hidden");
+        editorText.value = data.content;
+        editorSaveBtn.disabled = false;
+    } catch {
+        editorPreview.innerHTML = '<div class="placeholder">No se pudo abrir el archivo.</div>';
+        editorSaveBtn.disabled = true;
+    }
+}
+
+function fileRawUrl(path) {
+    return "/api/file/raw?path=" + encodeURIComponent(path) + "&t=" + Date.now();
+}
+
+function isImageFile(name) {
+    return /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(String(name || ""));
+}
+
+function isVideoFile(name) {
+    return /\.(mp4|webm|mkv|mov|avi|m4v|ogv)$/i.test(String(name || ""));
+}
+
+async function openRegularFile(path) {
+    return openFileInEditor(path);
+}
+
+async function loadFiles(path = "~/Downloads") {
+    try {
+        const res = await fetch("/api/files?path=" + encodeURIComponent(path));
+        const data = await res.json();
+        if (!data.ok) {
+            filesList.innerHTML = '<div class="file-row">No se pudieron cargar archivos</div>';
+            return;
+        }
+        currentFilesPath = data.path;
+        filePathLabel.textContent = data.path;
+        currentFilesEntries = data.entries || [];
+        renderFiles();
+    } catch {
+        filesList.innerHTML = '<div class="file-row">No se pudieron cargar archivos</div>';
+    }
+}
+
+function renderFiles() {
+    const q = (filesSearch.value || "").trim().toLowerCase();
+    filesList.innerHTML = "";
+    const filtered = currentFilesEntries.filter(entry => {
+        if (!q) return true;
+        return (entry.name || "").toLowerCase().includes(q);
+    });
+    for (const entry of filtered) {
+        const row = document.createElement("div");
+        row.className = "file-row" + (entry.is_dir ? " dir" : "");
+        entry.can_delete = !!entry.can_delete;
+        let preview = `<img class="file-icon" src="${iconUrl(entry.icon || (entry.is_dir ? "folder" : "application-x-executable"))}" onerror="this.src='${iconUrl(entry.is_dir ? "folder" : "application-x-executable")}'" />`;
+        if (entry.is_dir) {
+            preview = '<div class="file-preview"><img src="/api/icon?name=folder" alt=""></div>';
+        } else if (isImageFile(entry.name)) {
+            preview = `<div class="file-preview media-thumb"><img src="${fileRawUrl(entry.path)}" alt=""></div>`;
+        } else if (isVideoFile(entry.name)) {
+            preview = `<div class="file-preview media-thumb"><video muted playsinline preload="metadata" src="${fileRawUrl(entry.path)}"></video></div>`;
+        }
+        row.innerHTML = `
+            ${preview}
+            <div class="name-wrap">
+                <span class="name-main">${escapeHtml(entry.name)}</span>
+                <span class="name-sub">${entry.is_dir ? "carpeta" : fmtBytes(entry.size || 0)}</span>
+            </div>
+            <button class="mini open-btn" style="padding:2px 6px;" title="Abrir">Abrir</button>
+            <button class="mini delete-btn${entry.can_delete ? "" : " disabled"}" style="padding:2px 6px;" title="Eliminar">Eliminar</button>
+        `;
+        row.querySelector(".open-btn").addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (entry.is_dir) {
+                loadFiles(entry.path);
+                return;
+            }
+            openFileInEditor(entry.path);
+        });
+        row.querySelector(".delete-btn").addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (!entry.can_delete) return;
+            showFileConfirmModal(entry.path, entry.name);
+        });
+        row.addEventListener("dblclick", () => {
+            if (entry.is_dir) {
+                loadFiles(entry.path);
+                return;
+            }
+            openFileInEditor(entry.path);
+        });
+        filesList.appendChild(row);
+    }
+}
+
+function applyWallpaperPreset(name) {
+    const wp = wallpapers[name] || wallpapers.classic;
+    document.documentElement.style.setProperty("--desktop-bg", wp.css);
+    document.body.style.background = wp.css;
+    wallpaperOverlay.style.background = wp.css;
+    postJSON("/api/wallpaper", { mode: "preset", name });
+}
+
+function showDock() {
+    dockWrap.classList.add("show");
+    dockForceVisibleUntil = Date.now() + 5000;
+    if (dockVisibleTimer) clearTimeout(dockVisibleTimer);
+    dockVisibleTimer = setTimeout(() => {
+        if (Date.now() >= dockForceVisibleUntil && fullscreenOpen) dockWrap.classList.remove("show");
+    }, 5000);
+}
+
+function hideDockSoon() {
+    if (!fullscreenOpen) {
+        dockWrap.classList.add("show");
+        return;
+    }
+    if (dockVisibleTimer) clearTimeout(dockVisibleTimer);
+    dockVisibleTimer = setTimeout(() => {
+        if (Date.now() >= dockForceVisibleUntil) dockWrap.classList.remove("show");
+    }, 5000);
+}
+
+function hideDockMenu() {
+    dockMenu.classList.add("hidden");
+    dockMenu.style.visibility = "";
+    dockSelectedSlot = null;
+}
+
+function onDesktopMouseMove(e) {
+    updateCursorFromEvent(e);
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (fullscreenOpen) {
+        dockHovering = (e.clientY > rect.bottom - 18) || !dockMenu.classList.contains("hidden");
+        if (dockHovering) showDock(); else hideDockSoon();
+    } else {
+        dockHovering = true;
+        dockWrap.classList.add("show");
+    }
+}
+
+function ensureAudioStarted() {
+    if (audioCtxState.active) return;
+    audioCtxState.active = true;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    audioCtxState.ctx = new AC({ latencyHint: "interactive", sampleRate: 48000 });
+    audioCtxState.node = audioCtxState.ctx.createScriptProcessor(2048, 0, 2);
+    audioCtxState.node.onaudioprocess = (ev) => {
+        const outL = ev.outputBuffer.getChannelData(0);
+        const outR = ev.outputBuffer.getChannelData(1);
+        let i = 0;
+        while (i < outL.length) {
+            if (!audioCtxState.queue.length) {
+                outL.fill(0, i);
+                outR.fill(0, i);
+                break;
+            }
+            const chunk = audioCtxState.queue[0];
+            const frames = chunk.length / 2;
+            const available = frames - audioCtxState.chunkOffset;
+            const need = outL.length - i;
+            const n = Math.min(available, need);
+            for (let j = 0; j < n; j++) {
+                const idx = (audioCtxState.chunkOffset + j) * 2;
+                outL[i + j] = chunk[idx];
+                outR[i + j] = chunk[idx + 1];
+            }
+            i += n;
+            audioCtxState.chunkOffset += n;
+            if (audioCtxState.chunkOffset >= frames) {
+                audioCtxState.queue.shift();
+                audioCtxState.queueFrames -= frames;
+                audioCtxState.chunkOffset = 0;
+            }
+        }
+    };
+    audioCtxState.node.connect(audioCtxState.ctx.destination);
+    audioCtxState.ctx.resume().catch(() => {});
+    startAudioStream().catch(() => {});
+}
+
+async function startAudioStream() {
+    if (audioCtxState.pump) return;
+    audioCtxState.pump = true;
+    try {
+        const res = await fetch("/audio?t=" + Date.now(), { cache: "no-store" });
+        const reader = res.body.getReader();
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            if (!value || !value.byteLength) continue;
+            const int16 = new Int16Array(value.buffer, value.byteOffset, Math.floor(value.byteLength / 2));
+            if (!int16.length) continue;
+            const floatChunk = new Float32Array(int16.length);
+            for (let i = 0; i < int16.length; i++) floatChunk[i] = Math.max(-1, Math.min(1, int16[i] / 32768));
+            const frames = floatChunk.length / 2;
+            audioCtxState.queue.push(floatChunk);
+            audioCtxState.queueFrames += frames;
+            const maxFrames = 48000 * 0.22;
+            while (audioCtxState.queueFrames > maxFrames && audioCtxState.queue.length > 1) {
+                const old = audioCtxState.queue.shift();
+                audioCtxState.queueFrames -= old.length / 2;
+                audioCtxState.chunkOffset = 0;
+            }
+        }
+    } catch (e) {
+        console.warn("audio stream error", e);
+    } finally {
+        audioCtxState.pump = false;
+    }
+}
+
+let audioInitBound = false;
+function bindAudioOnce() {
+    if (audioInitBound) return;
+    audioInitBound = true;
+    document.addEventListener("pointerdown", ensureAudioStarted, { once: true });
+}
+
+screen.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    const pos = getVirtualCoords(e);
+    postJSON("/api/click", { x: pos.x, y: pos.y, button: 3 });
+    screen.focus({ preventScroll: true });
+});
+
+screen.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    bindAudioOnce();
+    ensureAudioStarted();
+    const pos = getVirtualCoords(e);
+    dragStartPos = pos;
+    lastVirtualPos = pos;
+    isDragging = false;
+    screen._isDragging = false;
+    screen.style.cursor = "grabbing";
+    postJSON("/api/mousedown", { x: pos.x, y: pos.y, button: 1 });
+    forceKeyboardFocus();
+});
+
+screen.addEventListener("pointermove", (e) => {
+    if (!dragStartPos) return;
+    const pos = getVirtualCoords(e);
+    const dx = pos.x - dragStartPos.x;
+    const dy = pos.y - dragStartPos.y;
+    if (!isDragging && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
+        isDragging = true;
+        screen._isDragging = true;
+    }
+    if (isDragging) {
+        queueMouseMove(pos);
+        lastVirtualPos = pos;
+    }
+});
+
+screen.addEventListener("pointerup", (e) => {
+    if (e.button !== 0 || !dragStartPos) return;
+    if (isDragging) {
+        postJSON("/api/mouseup", { x: lastVirtualPos.x, y: lastVirtualPos.y, button: 1 });
+    } else {
+        postJSON("/api/click", { x: dragStartPos.x, y: dragStartPos.y, button: 1 });
+        const now = Date.now();
+        if (screen._lastClickTime && (now - screen._lastClickTime < 350)) {
+            postJSON("/api/key", { key: "Enter" });
+            screen._lastClickTime = 0;
+        } else {
+            screen._lastClickTime = now;
+        }
+    }
+    dragStartPos = null;
+    lastVirtualPos = null;
+    isDragging = false;
+    screen._isDragging = false;
+    screen.style.cursor = "default";
+    forceKeyboardFocus();
+    if (lastMouseEvent) updateCursorFromEvent(lastMouseEvent);
+});
+
+screen.addEventListener("pointerleave", () => {
+    if (dragStartPos) {
+        postJSON("/api/mouseup", { button: 1 });
+        dragStartPos = null;
+        lastVirtualPos = null;
+        isDragging = false;
+        screen._isDragging = false;
+    }
+    screen.style.cursor = "default";
+});
+
+screen.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const direction = e.deltaY < 0 ? "up" : "down";
+    postJSON("/api/scroll", { direction });
+}, { passive: false });
+
+document.getElementById("desktop").addEventListener("mousemove", onDesktopMouseMove);
+document.getElementById("desktop").addEventListener("mouseleave", () => { dockHovering = false; hideDockSoon(); });
+dockWrap.addEventListener("mouseenter", () => { dockHovering = true; showDock(); });
+dockWrap.addEventListener("mouseleave", () => { dockHovering = false; hideDockSoon(); });
+document.addEventListener("click", (e) => { if (!dockMenu.contains(e.target)) hideDockMenu(); }, true);
+
+taskbar.addEventListener("wheel", (e) => {
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+        e.preventDefault();
+        taskbar.scrollLeft += e.deltaY;
+    }
+}, { passive: false });
+
+document.addEventListener("keydown", async (e) => {
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)) return;
+
+    if (e.ctrlKey && e.key.toLowerCase() === "m") {
+        e.preventDefault();
+        hideAllPanels();
+        return;
+    }
+
+    e.preventDefault();
+    const printable = e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey;
+    if (printable) {
+        await postJSON("/api/type", { text: e.key });
+        return;
+    }
+    await postJSON("/api/key", { key: e.key, ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, meta: e.metaKey });
+}, true);
+
+appsBtn.addEventListener("click", () => {
+    const show = toggleAppsPanel();
+    if (show) notificationsPanel.classList.remove("show");
+});
+settingsBtn.addEventListener("click", () => setPanelVisible(settingsPanel, !settingsPanel.classList.contains("show")));
+filesBtn.addEventListener("click", () => {
+    setPanelVisible(filesPanel, !filesPanel.classList.contains("show"));
+    if (filesPanel.classList.contains("show")) loadFiles("~/Downloads");
+});
+browserBtn.addEventListener("click", () => launchToolbarAction("browser", "firefox"));
+editorBtn.addEventListener("click", () => {
+    setPanelVisible(notePanel, !notePanel.classList.contains("show"));
+    if (notePanel.classList.contains("show")) noteText.focus();
+});
+terminalBtn.addEventListener("click", () => launchToolbarAction("terminal", "xterm"));
+
+desktopBtn.addEventListener("click", async () => {
+    try {
+        const res = await fetch("/api/windows?t=" + Date.now());
+        const windows = await res.json();
+        for (const win of windows) {
+            if (!win.minimized) await postJSON("/api/minimize", { id: win.id, action: "minimize" });
+        }
+        setTimeout(updateTaskbar, 300);
+    } catch {}
+});
+
+reloadBtn.addEventListener("click", () => location.reload(true));
+refreshAppsBtn.addEventListener("click", () => {
+    loadApps(true);
+    pushNotification("Apps", "Se actualizó la lista de aplicaciones.");
+});
+
+notificationsBtn.addEventListener("click", () => {
+    const show = toggleNotificationsPanel();
+    if (show) appsPanel.classList.remove("show");
+});
+
+clearNotificationsBtn.addEventListener("click", () => {
+    clearNotifications();
+    pushNotification("Notificaciones", "Se borraron todas las notificaciones.");
+});
+
+notificationsPanel.querySelector(".panel-close").addEventListener("click", () => {
+    notificationsPanel.classList.remove("show");
+});
+
+
+appsResetBtn.addEventListener("click", () => {
+    appGridOrder = [];
+    localStorage.removeItem("app-grid-order");
+    renderApps(appSearch.value);
+});
+
+appConfirmCancel.addEventListener("click", hideAppConfirmModal);
+appConfirmOk.addEventListener("click", async () => {
+    if (!confirmDeleteTarget) return;
+    const app = confirmDeleteTarget;
+    hideAppConfirmModal();
+    setBusyStateForLaunch("Desinstalando app...");
+    const res = await postJSON("/api/apps/delete", { path: app.path });
+    endBusyState();
+    if (res.ok) {
+        toast(`"${app.name}" se desinstaló`);
+        await loadApps(true);
+    } else {
+        toast(res.error || "No se pudo desinstalar");
+    }
+});
+
+appInfoClose.addEventListener("click", () => {
+    appInfoModal.classList.remove("show");
+    appInfoTarget = null;
+});
+
+fileConfirmCancel.addEventListener("click", hideFileConfirmModal);
+fileConfirmOk.addEventListener("click", async () => {
+    if (!fileDeleteTarget) return;
+    const target = fileDeleteTarget;
+    hideFileConfirmModal();
+    const res = await postJSON("/api/file/delete", { path: target.path });
+    if (res.ok) {
+        pushNotification("Archivos", `Se eliminó ${target.name}.`);
+        await loadFiles(currentFilesPath);
+    } else {
+        toast(res.error || "No se pudo eliminar");
+    }
+});
+appInfoDownload.addEventListener("click", async () => {
+    if (appInfoTarget) await downloadAppIcon(appInfoTarget);
+});
+
+appConfirmModal.addEventListener("click", (e) => {
+    if (e.target === appConfirmModal) hideAppConfirmModal();
+});
+appInfoModal.addEventListener("click", (e) => {
+    if (e.target === appInfoModal) {
+        appInfoModal.classList.remove("show");
+        appInfoTarget = null;
+    }
+});
+appContextMenu.addEventListener("contextmenu", (e) => e.preventDefault());
+
+document.addEventListener("click", (e) => {
+    if (!dockMenu.contains(e.target)) hideDockMenu();
+    if (!appContextMenu.contains(e.target)) hideAppContextMenu();
+}, true);
+
+
+appSearch.addEventListener("input", () => renderApps(appSearch.value));
+filesSearch.addEventListener("input", renderFiles);
+subSearch.addEventListener("input", () => renderSubstitutionApps(subSearch.value));
+propsRefreshBtn.addEventListener("click", () => {
+    if (currentPropsSlotIndex !== null && currentPropsSlotIndex !== undefined) {
+        loadAppProperties(currentPropsSlotIndex);
+    }
+});
+
+document.querySelectorAll(".panel-close").forEach(btn => {
+    btn.addEventListener("click", () => {
+        const panel = document.getElementById(btn.dataset.close);
+        if (panel) panel.classList.remove("show");
+        if (btn.dataset.close === "substitutionPanel") currentDockTargetIndex = null;
+        if (btn.dataset.close === "propsPanel") currentPropsSlotIndex = null;
+    });
+});
+
+document.querySelectorAll(".preset").forEach(btn => { btn.addEventListener("click", () => applyWallpaperPreset(btn.dataset.wallpaper)); });
+uploadWpBtn.addEventListener("click", () => uploadWp.click());
+uploadWp.addEventListener("change", () => {
+    const file = uploadWp.files && uploadWp.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+        const preview = reader.result;
+        document.documentElement.style.setProperty("--desktop-bg", `url("${preview}") center/cover fixed no-repeat`);
+        document.body.style.background = `url("${preview}") center/cover fixed no-repeat`;
+        wallpaperOverlay.style.background = `url("${preview}") center/cover no-repeat`;
+        await postJSON("/api/wallpaper", { mode: "image", dataUrl: preview });
+    };
+    reader.readAsDataURL(file);
+});
+resetWpBtn.addEventListener("click", () => applyWallpaperPreset("classic"));
+
+saveNoteBtn.addEventListener("click", () => { localStorage.setItem("cloud-note", noteText.value); toast("Nota guardada"); });
+clearNoteBtn.addEventListener("click", () => { noteText.value = ""; localStorage.removeItem("cloud-note"); toast("Nota borrada"); });
+
+upDirBtn.addEventListener("click", async () => {
+    const parts = currentFilesPath.split("/").filter(Boolean);
+    if (parts.length === 0) return;
+    parts.pop();
+    const parent = parts.length ? "/" + parts.join("/") : "~";
+    await loadFiles(parent);
+});
+homeFilesBtn.addEventListener("click", () => loadFiles("~"));
+downloadsFilesBtn.addEventListener("click", () => loadFiles("~/Downloads"));
+appsFilesBtn.addEventListener("click", () => loadFiles("/usr/share/applications"));
+binFilesBtn.addEventListener("click", () => loadFiles("/usr/bin"));
+
+editorSaveBtn.addEventListener("click", async () => {
+    if (!currentEditorPath || editorText.classList.contains("hidden")) return;
+    const res = await postJSON("/api/file/save", { path: currentEditorPath, content: editorText.value });
+    if (res.ok) { toast("Archivo guardado"); pushNotification("Archivos", "Se guardó el archivo."); }
+});
+editorReloadBtn.addEventListener("click", async () => { if (!currentEditorPath || editorText.classList.contains("hidden")) return; await openFileInEditor(currentEditorPath); });
+editorOpenBtn.addEventListener("click", async () => { if (!currentEditorPath || editorText.classList.contains("hidden")) return; await postJSON("/api/file/open", { path: currentEditorPath }); });
+
+document.addEventListener("click", (e) => {
+    if ([appSearch, uploadWp, noteText, editorText, filesSearch, subSearch].includes(e.target)) return;
+    forceKeyboardFocus();
+}, true);
+
+function loadNote() {
+    noteText.value = localStorage.getItem("cloud-note") || "";
+}
+
+// appsPanel is fixed and centered; not draggable
+makeDraggable(settingsPanel, document.getElementById("settingsHandle"));
+makeDraggable(notePanel, document.getElementById("noteHandle"));
+makeDraggable(filesPanel, document.getElementById("filesHandle"));
+makeDraggable(editorPanel, document.getElementById("editorHandle"));
+makeDraggable(propsPanel, document.getElementById("propsHandle"));
+makeDraggable(substitutionPanel, document.getElementById("substitutionHandle"));
+
+renderDock();
+loadNote();
+syncWallpaperState();
+loadApps();
+checkReady();
+updateSystemInfo();
+updateTaskbar();
+showDock();
+
+renderNotifications();
+notificationsPanel.classList.remove("show");
+
+
+setInterval(checkReady, 2500);
+setInterval(loadApps, 60000);
+setInterval(pollAppsRevision, 2000);
+setInterval(updateSystemInfo, 4000);
+setInterval(updateTaskbar, 4000);
+setInterval(updateClock, 1000);
+updateClock();
+</script>
+</body>
+</html>
